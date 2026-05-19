@@ -29,36 +29,33 @@ st.markdown("### Atlantic Recording Corporation Analytics")
 # =====================================================
 
 @st.cache_data
-
 def load_data():
+
     df = pd.read_csv("Atlantic_United_Kingdom.csv")
 
-    # Date formatting
+    # Convert date
     df['date'] = pd.to_datetime(df['date'])
 
     # Duration in minutes
     df['duration_min'] = df['duration_ms'] / 60000
 
-    # Explicit labels
+    # Explicit label
     df['explicit_label'] = df['is_explicit'].apply(
-        lambda x: 'Explicit' if x == True else 'Clean'
+        lambda x: 'Explicit' if x else 'Clean'
     )
 
     # Rank groups
     def rank_group(pos):
         if pos <= 10:
-            return 'Top 10'
+            return "Top 10"
         elif pos <= 20:
-            return 'Top 20'
+            return "Top 20"
         else:
-            return 'Top 50'
+            return "Top 50"
 
     df['rank_group'] = df['position'].apply(rank_group)
 
-    # Artist normalization
-    df['artist_clean'] = df['artist'].str.lower().str.strip()
-
-    # Split collaborations
+    # Normalize artists
     delimiters = r',|&|feat\.|featuring| x '
 
     def split_artists(artist_string):
@@ -71,7 +68,7 @@ def load_data():
     # Collaboration count
     df['collaboration_count'] = df['artist_list'].apply(len)
 
-    # Solo vs collaboration
+    # Track type
     df['track_type'] = df['collaboration_count'].apply(
         lambda x: 'Collaboration' if x > 1 else 'Solo'
     )
@@ -82,12 +79,12 @@ def load_data():
 df = load_data()
 
 # =====================================================
-# SIDEBAR FILTERS
+# SIDEBAR
 # =====================================================
 
-st.sidebar.header("🎛 Dashboard Filters")
+st.sidebar.header("🎛 Filters")
 
-# Date filter
+# Date range
 min_date = df['date'].min()
 max_date = df['date'].max()
 
@@ -108,7 +105,7 @@ selected_artists = st.sidebar.multiselect(
     all_artists
 )
 
-# Album type filter
+# Album filter
 album_filter = st.sidebar.multiselect(
     "Album Type",
     options=df['album_type'].unique(),
@@ -122,9 +119,9 @@ explicit_filter = st.sidebar.multiselect(
     default=df['explicit_label'].unique()
 )
 
-# Solo / Collaboration
+# Track type filter
 track_filter = st.sidebar.multiselect(
-    "Track Type",
+    "Solo / Collaboration",
     options=df['track_type'].unique(),
     default=df['track_type'].unique()
 )
@@ -135,6 +132,7 @@ track_filter = st.sidebar.multiselect(
 
 filtered_df = df.copy()
 
+# Date filtering
 if len(selected_dates) == 2:
     start_date, end_date = selected_dates
 
@@ -143,18 +141,22 @@ if len(selected_dates) == 2:
         (filtered_df['date'] <= pd.to_datetime(end_date))
     ]
 
+# Album filter
 filtered_df = filtered_df[
     filtered_df['album_type'].isin(album_filter)
 ]
 
+# Explicit filter
 filtered_df = filtered_df[
     filtered_df['explicit_label'].isin(explicit_filter)
 ]
 
+# Track type filter
 filtered_df = filtered_df[
     filtered_df['track_type'].isin(track_filter)
 ]
 
+# Artist filter
 if selected_artists:
     filtered_df = filtered_df[
         filtered_df['artist_list'].apply(
@@ -193,19 +195,21 @@ single_ratio = round(
     2
 )
 
-# Artist Concentration Index
-
 top_5_share = 0
 
 if len(artist_counts) > 0:
     top_5_share = round(
-        (sum(dict(artist_counts.most_common(5)).values()) / total_entries) * 100,
+        (
+            sum(dict(artist_counts.most_common(5)).values())
+            / total_entries
+        ) * 100,
         2
     )
 
-# Diversity score
-
-diversity_score = round(unique_artists / total_entries, 2) if total_entries > 0 else 0
+diversity_score = round(
+    unique_artists / total_entries,
+    2
+) if total_entries > 0 else 0
 
 # =====================================================
 # KPI SECTION
@@ -225,289 +229,308 @@ col6.metric("Diversity Score", diversity_score)
 st.divider()
 
 # =====================================================
-# ARTIST DOMINANCE ANALYSIS
+# TABS
 # =====================================================
 
-st.markdown("## 🎤 Artist Dominance Analysis")
-
-artist_df = pd.DataFrame(
-    artist_counts.items(),
-    columns=['Artist', 'Appearances']
-).sort_values(by='Appearances', ascending=False)
-
-col1, col2 = st.columns([1, 2])
-
-with col1:
-    st.dataframe(artist_df.head(15), use_container_width=True)
-
-with col2:
-    fig_artist = px.bar(
-        artist_df.head(15),
-        x='Artist',
-        y='Appearances',
-        title='Top Artists by Playlist Presence'
-    )
-
-    st.plotly_chart(fig_artist, use_container_width=True)
-
-st.divider()
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "🎤 Artist Analysis",
+    "🤝 Collaboration",
+    "🔞 Explicit Content",
+    "💿 Album Analysis",
+    "⏱ Duration Insights"
+])
 
 # =====================================================
-# COLLABORATION ANALYSIS
+# TAB 1 - ARTIST ANALYSIS
 # =====================================================
 
-st.markdown("## 🤝 Collaboration Structure Analysis")
+with tab1:
 
-col1, col2 = st.columns(2)
+    st.markdown("## 🎤 Artist Dominance Leaderboard")
 
-with col1:
-    collab_counts = filtered_df['track_type'].value_counts().reset_index()
-    collab_counts.columns = ['Track Type', 'Count']
-
-    fig_collab = px.pie(
-        collab_counts,
-        names='Track Type',
-        values='Count',
-        title='Solo vs Collaboration Tracks'
+    artist_df = pd.DataFrame(
+        artist_counts.items(),
+        columns=['Artist', 'Appearances']
     )
 
-    st.plotly_chart(fig_collab, use_container_width=True)
-
-with col2:
-    rank_collab = filtered_df.groupby('rank_group')['collaboration_count'].mean().reset_index()
-
-    fig_rank_collab = px.bar(
-        rank_collab,
-        x='rank_group',
-        y='collaboration_count',
-        title='Average Collaborators by Rank Group'
+    artist_df = artist_df.sort_values(
+        by='Appearances',
+        ascending=False
     )
 
-    st.plotly_chart(fig_rank_collab, use_container_width=True)
+    col1, col2 = st.columns([1, 2])
+
+    with col1:
+        st.dataframe(
+            artist_df.head(15),
+            use_container_width=True
+        )
+
+    with col2:
+
+        fig_artist = px.bar(
+            artist_df.head(15),
+            x='Artist',
+            y='Appearances',
+            title='Top Artists by Playlist Presence',
+            text='Appearances'
+        )
+
+        st.plotly_chart(
+            fig_artist,
+            use_container_width=True
+        )
 
 # =====================================================
-# NETWORK GRAPH
+# TAB 2 - COLLABORATION
 # =====================================================
 
-st.markdown("### 🌐 Artist Collaboration Network")
+with tab2:
 
-G = nx.Graph()
+    st.markdown("## 🤝 Collaboration Analysis")
 
-for artists in filtered_df['artist_list']:
-    if len(artists) > 1:
-        for i in range(len(artists)):
-            for j in range(i + 1, len(artists)):
-                G.add_edge(artists[i], artists[j])
+    col1, col2 = st.columns(2)
 
-if len(G.nodes()) > 0:
-    pos = nx.spring_layout(G, seed=42)
+    with col1:
 
-    edge_x = []
-    edge_y = []
+        collab_counts = filtered_df['track_type'].value_counts().reset_index()
+        collab_counts.columns = ['Track Type', 'Count']
 
-    for edge in G.edges():
-        x0, y0 = pos[edge[0]]
-        x1, y1 = pos[edge[1]]
-        edge_x.extend([x0, x1, None])
-        edge_y.extend([y0, y1, None])
+        fig_collab = px.pie(
+            collab_counts,
+            names='Track Type',
+            values='Count',
+            title='Solo vs Collaboration'
+        )
 
-    edge_trace = go.Scatter(
-        x=edge_x,
-        y=edge_y,
-        line=dict(width=0.5),
-        hoverinfo='none',
-        mode='lines'
-    )
+        st.plotly_chart(
+            fig_collab,
+            use_container_width=True
+        )
 
-    node_x = []
-    node_y = []
-    node_text = []
+    with col2:
 
-    for node in G.nodes():
-        x, y = pos[node]
-        node_x.append(x)
-        node_y.append(y)
-        node_text.append(node)
+        rank_collab = filtered_df.groupby(
+            'rank_group'
+        )['collaboration_count'].mean().reset_index()
 
-    node_trace = go.Scatter(
-        x=node_x,
-        y=node_y,
-        mode='markers+text',
-        text=node_text,
-        hoverinfo='text',
-        textposition='top center',
-        marker=dict(size=12)
-    )
+        fig_rank = px.bar(
+            rank_collab,
+            x='rank_group',
+            y='collaboration_count',
+            title='Average Collaborators by Rank Group',
+            text='collaboration_count'
+        )
 
-    fig_network = go.Figure(data=[edge_trace, node_trace])
+        st.plotly_chart(
+            fig_rank,
+            use_container_width=True
+        )
 
-    fig_network.update_layout(
-        title='Artist Collaboration Network',
-        showlegend=False,
-        height=700
-    )
+    st.markdown("### 🌐 Collaboration Network")
 
-    st.plotly_chart(fig_network, use_container_width=True)
+    G = nx.Graph()
 
-st.divider()
+    for artists in filtered_df['artist_list']:
 
-# =====================================================
-# EXPLICIT CONTENT ANALYSIS
-# =====================================================
+        if len(artists) > 1:
 
-st.markdown("## 🔞 Explicit Content Analysis")
+            for i in range(len(artists)):
+                for j in range(i + 1, len(artists)):
 
-col1, col2 = st.columns(2)
+                    G.add_edge(
+                        artists[i],
+                        artists[j]
+                    )
 
-with col1:
-    explicit_counts = filtered_df['explicit_label'].value_counts().reset_index()
-    explicit_counts.columns = ['Type', 'Count']
+    if len(G.nodes()) > 0:
 
-    fig_explicit = px.pie(
-        explicit_counts,
-        names='Type',
-        values='Count',
-        title='Explicit vs Clean Content'
-    )
+        pos = nx.spring_layout(G, seed=42)
 
-    st.plotly_chart(fig_explicit, use_container_width=True)
+        edge_x = []
+        edge_y = []
 
-with col2:
-    fig_box = px.box(
-        filtered_df,
-        x='explicit_label',
-        y='position',
-        title='Rank Distribution by Content Type'
-    )
+        for edge in G.edges():
 
-    st.plotly_chart(fig_box, use_container_width=True)
+            x0, y0 = pos[edge[0]]
+            x1, y1 = pos[edge[1]]
 
-st.divider()
+            edge_x.extend([x0, x1, None])
+            edge_y.extend([y0, y1, None])
 
-# =====================================================
-# ALBUM STRUCTURE ANALYSIS
-# =====================================================
+        edge_trace = go.Scatter(
+            x=edge_x,
+            y=edge_y,
+            mode='lines',
+            hoverinfo='none'
+        )
 
-st.markdown("## 💿 Album Structure & Release Strategy")
+        node_x = []
+        node_y = []
+        node_text = []
 
-col1, col2 = st.columns(2)
+        for node in G.nodes():
 
-with col1:
-    album_counts = filtered_df['album_type'].value_counts().reset_index()
-    album_counts.columns = ['Album Type', 'Count']
+            x, y = pos[node]
 
-    fig_album = px.pie(
-        album_counts,
-        names='Album Type',
-        values='Count',
-        title='Single vs Album Distribution'
-    )
+            node_x.append(x)
+            node_y.append(y)
+            node_text.append(node)
 
-    st.plotly_chart(fig_album, use_container_width=True)
+        node_trace = go.Scatter(
+            x=node_x,
+            y=node_y,
+            mode='markers+text',
+            text=node_text,
+            hoverinfo='text',
+            textposition='top center',
+            marker=dict(size=12)
+        )
 
-with col2:
-    fig_tracks = px.scatter(
-        filtered_df,
-        x='total_tracks',
-        y='popularity',
-        color='album_type',
-        title='Album Size vs Popularity',
-        hover_data=['song', 'artist']
-    )
+        fig_network = go.Figure(
+            data=[edge_trace, node_trace]
+        )
 
-    st.plotly_chart(fig_tracks, use_container_width=True)
+        fig_network.update_layout(
+            title='Artist Collaboration Network',
+            showlegend=False,
+            height=700
+        )
 
-st.divider()
+        st.plotly_chart(
+            fig_network,
+            use_container_width=True
+        )
 
 # =====================================================
-# TRACK DURATION ANALYSIS
+# TAB 3 - EXPLICIT CONTENT
 # =====================================================
 
-st.markdown("## ⏱ Track Duration & Listener Preference")
+with tab3:
 
-col1, col2 = st.columns(2)
+    st.markdown("## 🔞 Explicit Content Analysis")
 
-with col1:
-    fig_duration = px.histogram(
-        filtered_df,
-        x='duration_min',
-        nbins=20,
-        title='Track Duration Distribution'
-    )
+    col1, col2 = st.columns(2)
 
-    st.plotly_chart(fig_duration, use_container_width=True)
+    with col1:
 
-with col2:
-    fig_duration_pop = px.scatter(
-        filtered_df,
-        x='duration_min',
-        y='popularity',
-        color='rank_group',
-        title='Duration vs Popularity',
-        hover_data=['song', 'artist']
-    )
+        explicit_counts = filtered_df[
+            'explicit_label'
+        ].value_counts().reset_index()
 
-    st.plotly_chart(fig_duration_pop, use_container_width=True)
+        explicit_counts.columns = ['Type', 'Count']
 
-st.divider()
+        fig_explicit = px.pie(
+            explicit_counts,
+            names='Type',
+            values='Count',
+            title='Explicit vs Clean Content'
+        )
+
+        st.plotly_chart(
+            fig_explicit,
+            use_container_width=True
+        )
+
+    with col2:
+
+        fig_box = px.box(
+            filtered_df,
+            x='explicit_label',
+            y='position',
+            title='Rank Distribution by Content Type'
+        )
+
+        st.plotly_chart(
+            fig_box,
+            use_container_width=True
+        )
 
 # =====================================================
-# MARKET STRUCTURE INSIGHTS
+# TAB 4 - ALBUM ANALYSIS
 # =====================================================
 
-st.markdown("## 📊 Market Structure Intelligence")
+with tab4:
 
-col1, col2 = st.columns(2)
+    st.markdown("## 💿 Album Structure Analysis")
 
-with col1:
-    market_metrics = pd.DataFrame({
-        'Metric': [
-            'Collaboration Ratio',
-            'Explicit Share',
-            'Single Ratio',
-            'Top 5 Artist Share',
-            'Diversity Score'
-        ],
-        'Value': [
-            collaboration_ratio,
-            explicit_share,
-            single_ratio,
-            top_5_share,
-            diversity_score * 100
-        ]
-    })
+    col1, col2 = st.columns(2)
 
-    fig_market = px.bar(
-        market_metrics,
-        x='Metric',
-        y='Value',
-        title='Market Structure Metrics'
-    )
+    with col1:
 
-    st.plotly_chart(fig_market, use_container_width=True)
+        album_counts = filtered_df[
+            'album_type'
+        ].value_counts().reset_index()
 
-with col2:
-    avg_duration = round(filtered_df['duration_min'].mean(), 2)
-    avg_popularity = round(filtered_df['popularity'].mean(), 2)
+        album_counts.columns = ['Album Type', 'Count']
 
-    summary_df = pd.DataFrame({
-        'Insight': [
-            'Average Track Duration',
-            'Average Popularity',
-            'Unique Artists',
-            'Collaborative Tracks'
-        ],
-        'Value': [
-            avg_duration,
-            avg_popularity,
-            unique_artists,
-            filtered_df[filtered_df['track_type'] == 'Collaboration'].shape[0]
-        ]
-    })
+        fig_album = px.pie(
+            album_counts,
+            names='Album Type',
+            values='Count',
+            title='Single vs Album Distribution'
+        )
 
-    st.dataframe(summary_df, use_container_width=True)
+        st.plotly_chart(
+            fig_album,
+            use_container_width=True
+        )
 
-st.divider()
+    with col2:
+
+        fig_tracks = px.scatter(
+            filtered_df,
+            x='total_tracks',
+            y='popularity',
+            color='album_type',
+            hover_data=['song', 'artist'],
+            title='Album Size vs Popularity'
+        )
+
+        st.plotly_chart(
+            fig_tracks,
+            use_container_width=True
+        )
+
+# =====================================================
+# TAB 5 - DURATION INSIGHTS
+# =====================================================
+
+with tab5:
+
+    st.markdown("## ⏱ Track Duration Insights")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        fig_duration = px.histogram(
+            filtered_df,
+            x='duration_min',
+            nbins=20,
+            title='Track Duration Distribution'
+        )
+
+        st.plotly_chart(
+            fig_duration,
+            use_container_width=True
+        )
+
+    with col2:
+
+        fig_duration_pop = px.scatter(
+            filtered_df,
+            x='duration_min',
+            y='popularity',
+            color='rank_group',
+            hover_data=['song', 'artist'],
+            title='Duration vs Popularity'
+        )
+
+        st.plotly_chart(
+            fig_duration_pop,
+            use_container_width=True
+        )
 
 # =====================================================
 # RAW DATA
@@ -515,10 +538,13 @@ st.divider()
 
 st.markdown("## 🗂 Dataset Preview")
 
-st.dataframe(filtered_df, use_container_width=True)
+st.dataframe(
+    filtered_df,
+    use_container_width=True
+)
 
 # =====================================================
-# DOWNLOAD OPTION
+# DOWNLOAD BUTTON
 # =====================================================
 
 csv = filtered_df.to_csv(index=False).encode('utf-8')
@@ -535,6 +561,7 @@ st.download_button(
 # =====================================================
 
 st.markdown("---")
+
 st.markdown(
-    "### Developed for Atlantic Recording Corporation | UK Playlist Market Structure Analytics"
+    "### UK Top 50 Playlist Market Structure Dashboard | Atlantic Recording Corporation"
 )
